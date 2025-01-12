@@ -14,3 +14,21 @@
 	pip install -r requirement.txt
 # Bước 4 Run code 
 python data_process.py
+
+# Flow chart 
+	Dữ liệu đọc từ data file :
+
+![image](https://github.com/user-attachments/assets/6d307d2b-63a1-4747-8100-e0d9997964ed)
+
+	Convert time to step:
+![image](https://github.com/user-attachments/assets/211e573f-5ef5-47ba-8592-d321c2cdcfc0)
+
+	Filled missing values 
+ ![image](https://github.com/user-attachments/assets/b063be32-cc67-4cde-ae91-85646a2cc773)
+
+ 	Predicted missing values with XGBRegressor
+![image](https://github.com/user-attachments/assets/50abe892-21a4-426f-84ec-aca89d432608)
+	
+ 	Build LSTM 
+ 
+ ![image](https://github.com/user-attachments/assets/a6869bd1-3dbc-435e-8566-a69b36870528)
