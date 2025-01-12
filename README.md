@@ -1,6 +1,6 @@
 # lstm_icu_mortality_data
-# Nghiên cứu  dữ liệu icu_mortality_data (một dạng biến thể timeseries với các kỹ thuật xử lý 
-# B1. Tạo biến môi trường cho python (3.x)
+	Nghiên cứu  dữ liệu icu_mortality_data (một dạng biến thể timeseries với các kỹ thuật xử lý )
+# Bước 1. Tạo biến môi trường cho python (3.x)
 	Windows:
 		py -m venv .venv
 	Unix/MacOS:
