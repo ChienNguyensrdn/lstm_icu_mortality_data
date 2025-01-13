@@ -18,6 +18,11 @@ graph TD
     M --> N[Print Results]
     N --> O[End]
 ```
+### Mathematical Model Summary:
+![image](https://github.com/user-attachments/assets/5b3d4669-6c25-4748-a273-a58929c4841f)
+### Next:
+![image](https://github.com/user-attachments/assets/794af3db-82fc-40bd-9f00-90d5e9cdb1e5)
+
 
 2. **Hướng dẫn Cài đặt và Chạy Code**:
    - Bước 1: Tạo môi trường ảo co Python (phiên bản 3.x)
