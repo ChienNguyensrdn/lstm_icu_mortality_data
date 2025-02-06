@@ -8,13 +8,17 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error,mean_absolute_error
+from keras.models import load_model
+from statsmodels.tsa.arima.model import ARIMA
+import logging
+import pickle
 
 class DataProcess():
     def __init__(self, data):
         self.data = data
         self.parameter = 'HR'
-        self.interval = 15
+        self.interval = 10
         self.look_back = 3
         self.train_size = 0.7
         self.combined_df = None
@@ -26,6 +30,7 @@ class DataProcess():
         self.epochs = 20
         self.batch_size = 32
         self.dropout = 0.2
+        self.regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
         self.early_stopping = EarlyStopping(
             monitor='val_loss',  # Giám sát validation loss
             patience=20,           # Số epoch không cải thiện liên tiếp trước khi dừng
@@ -49,9 +54,10 @@ class DataProcess():
         # step = 1 tương ứng với thời gian thứ 2 của parameter - thời gian đầu tiên của parameter
         # step = 2 tương ứng với thời gian thứ 3 của parameter - thời gian thứ 2 của parameter
         # ... cho đến hết
-        # output : dataframe có các thuộc tính sau : [step, value]
+        # output : dataframe có các thuộc tính sau : [Time, Step, Value]
         # chuyển đổi time sang số phút nguyên tắc split df['Time'] thành 2 phần hh:mm 
         # số phút = 60*hh + mm
+        # merge voi du lieu co san theo parameter
         df = self.data[self.data['Parameter'] == self.parameter].copy()
         df['Minutes'] = df['Time'].apply(lambda x: int(x.split(':')[0]) * 60 + int(x.split(':')[1]))
         df['Step'] = df['Minutes'].diff().fillna(0).cumsum().astype(int)
@@ -85,15 +91,16 @@ class DataProcess():
         y_train = train_df['Value']
         X_test = test_df[['Step']]
 
-        model =  XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
-        model.fit(X_train, y_train)
+        self.regressor =  XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
+        self.regressor.fit(X_train, y_train)
         # predictions = model.predict(X_test)
+        Predicts =[]
         for index, row in df.iterrows():
             if row['Value'] == -1:
-                df['Predict'] = model.predict([row['Step']])[0]
+                Predicts.append(self.regressor.predict([row['Step']])[0])
             else:
-                df['Predict'] = row['Value']
-
+                Predicts.append( row['Value'])
+        df['Predict'] = Predicts
 
         # df.loc[df['Value'] == -1, 'Predict'] = model.predict(df[df['Value'] == -1]['Step'])
         # df.loc[df['Value'] != -1, 'Predict'] = df['Value'] 
@@ -131,7 +138,7 @@ class DataProcess():
             all_data.append(predicted_df)
 
         combined_df = pd.concat(all_data, ignore_index=True)
-        print('create_data_folder_path', combined_df[['Id', 'Time','Step', 'Value', 'Parameter', 'Predict']])
+        self.combined_df = combined_df
         return combined_df[['Id', 'Time','Step', 'Value', 'Parameter', 'Predict']]
     def create_dataset(self,dataset ):
         X, y = [], []
@@ -140,32 +147,8 @@ class DataProcess():
             X.append(a)
             y.append(dataset[i + self.look_back, 0])
         return pd.DataFrame({'X': X, 'y': y})
-    # def create_dataset(self, data: pd.DataFrame) -> pd.DataFrame:
-    #     '''
-    #     Tạo dataset cho mô hình LSTM
-    #     Input : data, look_back
-    #     data là một data frame có các cột ['Time', 'Value', 'Parameter', 'Predict']
-    #     mục tiêu bài toán là dự đoán Predict dựa trên look_back dữ liệu trước đó
-    #     cần convert data về dạng numpy array để đưa vào mô hình LSTM
-    #     Output : dataframe có các thuộc tính sau : ['X', 'y']
-    #     '''
-    #     # Select data according to parameter and order by Id, Step
-    #     # df = df.sort_values(by=['Id', 'Step'])
-
-    #     predict_list = data
-
-    #     X, y = [], []
-    #     for i in range(len(predict_list) - self.look_back):
-    #         if i + self.look_back < len(predict_list):
-    #             X.append(predict_list[i:(i + self.look_back)])
-    #             y.append(predict_list[i + self.look_back])
-                
-    #     X = np.array(X)
-    #     y = np.array(y)
-
-    #     return pd.DataFrame({'X': X, 'y': y})
-
-    def Model_LSTM(self):
+    
+    def Model_LSTM(self, regressor:str= None):
         '''
         Xây dựng mô hình LSTM để dự đoán du liệu tra ve tu ham create_dataset
         Goi y cac siêu tham số cần thiết
@@ -239,9 +222,64 @@ class DataProcess():
         # Print model summary
         model.summary()
         self.model = model
+        y_pred = model.predict(self.X_test)
+        y_pred = self.scaler.inverse_transform(y_pred.reshape(-1, 1))
+        y_test = self.scaler.inverse_transform(self.y_test.reshape(-1, 1))
+        mse = mean_squared_error(y_test,y_pred)
+        mae = mean_absolute_error(y_test,y_pred)
+        model_file = 'LSTM'+self.parameter+'_'+regressor+'.keras'
+        model.save('Models/'+model_file)
+        logging.info(f"LSTM Mean Squared Error {regressor} : {mse}")
+        logging.info(f"LSTM Mean absolute error {regressor} : {mae}")
         return model
 
+    def Model_ARIMA(self, regressor:str):
+        '''
+        Xây dựng mô hình ARIMA để dự đoán dữ liệu
+        Input : self.parameter
+        Cac buoc thuc hien :
+        - Tạo dataset voi ham create_data_folder_path thu duoc combined_df ->pd.DataFrame
+        - Chia train va test theo self.train_size
+            - train_size = int(len(combined_df) * self.train_size)
+            - test_size = len(combined_df) - train_size
+            - train, test = combined_df[0:train_size], combined_df[train_size:len(combined_df)]
+        - scaler = MinMaxScaler(feature_range=(0, 1)) dùng để chuẩn hóa dữ liệu
+        - Create and fit the ARIMA model
+        Output : None
+        '''
+        # Create dataset
+        dataset = self.combined_df[self.combined_df['Parameter'] == self.parameter].copy()
+        dataset = self.combined_df[['Predict']]
+        dataset = self.scaler.fit_transform(np.array(dataset).reshape(-1, 1))
+        train_size = int(len(dataset) * self.train_size)
+        test_size = len(dataset) - train_size
+        train, test = dataset[0:train_size], dataset[train_size:len(dataset)]
+         # Extract X and y
+        self.X_train = train
+        self.y_train = train
+        self.X_test = test
+        self.y_test = test
+        # Fit ARIMA model
+        model = ARIMA(train, order=(5, 1, 0))
+        model_fit = model.fit()
+        
+        # Make predictions
+        predictions = model_fit.forecast(steps=test_size)
+        
+        # Inverse transform predictions
+        predictions = self.scaler.inverse_transform(predictions.reshape(-1, 1))
+        test = self.scaler.inverse_transform(test.reshape(-1, 1))
+        
+        # Calculate MSE
+        mse = mean_squared_error(test, predictions)
+        mae = mean_absolute_error(test, predictions)
+        logging.info(f"ARIMA Mean Squared Error {regressor} : {mse}")
+        logging.info(f"ARIMA Mean absolute error {regressor} : {mae}")
+        model_file = 'ARIMA'+self.parameter+'_'+regressor+'.pkl'
 
+        with open("Models/"+model_file, "wb") as file:
+            pickle.dump("Models/"+model_file, file)
+        return model_fit
 def main():
     # Example data
     data = pd.DataFrame({
@@ -263,16 +301,17 @@ def main():
     step_data = processor.convert_time_to_step()
     print("Converted time to step:",len(step_data))
     print(step_data)
-
+    step_data.to_csv('DataOutput/1_datadataset.csv')
     # Test fill_missing_values method
     filled_data = processor.fill_missing_values()
     print("Filled missing values:", len(filled_data))
     print(filled_data)
-
+    filled_data.to_csv('DataOutput/2_datadataset.csv')
     # Test XGBRegressor_predict_missing method
     predicted_data = processor.XGBRegressor_predict_missing()
     print("Predicted missing values:",len(predicted_data))
     print(predicted_data)
+    predicted_data.to_csv('DataOutput/3_datadataset.csv')
 
     # Test create_data_folder_path method
     folder_path = '/home/chiennguyen/workspaces/Paper/DataInput/set-a/set-a'
@@ -282,6 +321,7 @@ def main():
 
     # Test Model_LSTM method
     model = processor.Model_LSTM()
+    model.save('Models/lstm_hr.keras')
     y_pred = model.predict(processor.X_test)
     mse = mean_squared_error(processor.y_test, y_pred)
     print(f"Mean Squared Error: {mse}")
@@ -295,3 +335,10 @@ def main():
     # print(f"Mean Squared Error: {mse}")
 if __name__ == "__main__":
     main()
+
+
+'''
+Giai phap hoi quy nao tot nhat 
+So sanh giai phap dung hoi quy voi khong hoi quy xem co tot hon khong
+
+'''
