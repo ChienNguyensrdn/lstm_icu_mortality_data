@@ -58,5 +58,18 @@ class LstmTimeSeries:
             X = X[:, 1:, :]
         return np.array(y_pred)
 
-    def evaluate(self, y_true, y_pred):
-        return mean_squared_error(y_true, y_pred)
+    def evaluate(self, y_true, y_pred, y_miss):
+        '''
+        Đánh giá mô hình bằng cách so sánh giá trị dự đoán và giá trị thực tế
+        :param y_true: Giá trị thực tế
+        :param y_pred: Giá trị dự đoán
+        :param y_miss: Giá trị bị thiếu
+        :return: Mean Squared Error
+        Neu y_miss = -1 thi khong tinh vao MSE
+        '''
+        # Filter out the missing values
+        mask = y_miss != -1
+        y_true_filtered = y_true[mask]
+        y_pred_filtered = y_pred[mask]
+        
+        return mean_squared_error(y_true_filtered, y_pred_filtered)
