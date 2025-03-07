@@ -145,7 +145,7 @@ if __name__ == '__main__':
         model = lstm.build_model()
         model = lstm.fit_model(model, X_train, y_train)
         y_pred = lstm.predict(model, X_test)
-        mse = mean_squared_error(y_test, y_pred)
+        mse = lstm.evaluate(y_test, y_pred, y_miss=miss_test_y)
         print('Mean Squared Error: %.2f' % mse)
         return mse
         
